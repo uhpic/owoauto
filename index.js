@@ -3,10 +3,12 @@
   const { React, ReactNative } = vendetta.metro.common;
   const { Forms } = vendetta.ui.components;
   const { useProxy } = vendetta.storage;
+  const { showToast } = vendetta.ui.toasts;
   const storage = vendetta.plugin.storage;
 
   const Messages = findByProps("sendMessage", "receiveMessage");
-  const { FormInput, FormSwitch, FormSection } = Forms;
+  const Rest = findByProps("getAPIBaseURL", "get");
+  const { FormInput, FormSwitch, FormSection, FormRow } = Forms;
   const h = React.createElement;
 
   storage.channelId ??= "";
@@ -15,20 +17,37 @@
   storage.minMinutes ??= "5";
   storage.maxMinutes ??= "10";
   storage.enabled ??= true;
+  storage.useRest ??= false;
 
   let timer;
 
-  function send() {
-    if (!storage.enabled || !storage.channelId || !storage.targetId) return;
+  function send(manual) {
+    if (!storage.channelId || !storage.targetId) {
+      if (manual) showToast("Fill in both IDs first");
+      return;
+    }
+    if (!storage.enabled && !manual) return;
+    const content = `${storage.command} <@${storage.targetId}>`;
     try {
-      Messages.sendMessage(storage.channelId, {
-        content: `${storage.command} <@${storage.targetId}>`,
-        invalidEmojis: [],
-        tts: false,
-        validNonShortcutEmojis: [],
-      });
+      if (storage.useRest) {
+        Rest.post({
+          url: `/channels/${storage.channelId}/messages`,
+          body: { content, tts: false, nonce: String(Date.now()) },
+        })
+          .then(() => manual && showToast("Sent (REST)"))
+          .catch((e) => showToast("REST failed: " + (e?.message || e)));
+      } else {
+        const r = Messages.sendMessage(storage.channelId, {
+          content,
+          invalidEmojis: [],
+          tts: false,
+          validNonShortcutEmojis: [],
+        });
+        if (r?.catch) r.catch((e) => showToast("Send failed: " + (e?.message || e)));
+        if (manual) showToast("Sent (sendMessage)");
+      }
     } catch (e) {
-      console.error("[OwO Auto]", e);
+      showToast("Error: " + (e?.message || e));
     }
   }
 
@@ -40,7 +59,7 @@
   }
 
   function loop() {
-    send();
+    send(false);
     timer = setTimeout(loop, nextDelay());
   }
 
@@ -52,10 +71,19 @@
       h(
         FormSection,
         { title: "OwO Auto" },
+        h(FormRow, {
+          label: "Send now (test)",
+          onPress: () => send(true),
+        }),
         h(FormSwitch, {
           label: "Enabled",
           value: storage.enabled,
           onValueChange: (v) => (storage.enabled = v),
+        }),
+        h(FormSwitch, {
+          label: "Use REST API (try if nothing sends)",
+          value: storage.useRest,
+          onValueChange: (v) => (storage.useRest = v),
         }),
         h(FormInput, {
           title: "Channel ID",
