@@ -1,0 +1,7 @@
+{
+  "name": "OwO Auto",
+  "description": "Sends an OwO command to a player at random intervals",
+  "authors": [{ "uhpic": "moksh" }],
+  "main": "index.js",
+  "vendetta": { "icon": "ic_message" }
+}
